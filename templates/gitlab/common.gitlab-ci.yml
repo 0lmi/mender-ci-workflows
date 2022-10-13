@@ -1,0 +1,3 @@
+variables:
+  MENDER_ARTIFACTS_FOLDER: mender-artifacts     # GitLab CI artifacts folder shared across all Mender templates
+  MENDER_SERVER_URL: "https://hosted.mender.io" # Default Mender server URL

@@ -1,0 +1,90 @@
+stages:
+  - build
+  - publish
+  - deploy
+
+include:
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/mender-artifact-build.gitlab-ci.yml"
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/mender-artifact-upload.gitlab-ci.yml"
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/mender-deployment-create.gitlab-ci.yml"
+
+#
+# Builds Mender artifact using 'mender-artifact' tool,
+# generate and save deployment name and deployment group
+#
+build:mender:artifact:one:
+  stage: build
+  extends: .build:mender:artifact
+  variables:
+    MENDER_DEVICES_GROUP_NAME: group-one
+  script:
+    # create Mender artifact
+    - echo /home/root/.ssh > dest_dir
+    - echo authorized_keys > filename
+    - echo key > authorized_keys
+    - ARTIFACT_FILE_NAME=artifact_one.mender
+    - |
+      mender-artifact write module-image \
+        -T single-file \
+        --device-type raspberrypi4 \
+        -o ${MENDER_ARTIFACTS_FOLDER}/${ARTIFACT_FILE_NAME} \
+        -n updated-auth_keys-1.0 \
+        --software-name auth_keys \
+        --software-version 1.0 \
+        -f dest_dir \
+        -f filename \
+        -f authorized_keys
+    # save deplyment name for the artifact, to be used by deploy job
+    - echo "dev_sensors_${CI_COMMIT_SHORT_SHA}" > ${MENDER_ARTIFACTS_FOLDER}/${ARTIFACT_FILE_NAME}MENDER_DEPLOYMENT_NAME
+    # save devices group name, to be used by deploy job
+    - echo "${MENDER_DEVICES_GROUP_NAME}" > ${MENDER_ARTIFACTS_FOLDER}/${ARTIFACT_FILE_NAME}MENDER_DEPLOYMENT_GROUP
+
+#
+# Builds Mender artifact using 'mender-artifact' tool,
+# generate and save deployment name and list of devices to be deployed to
+#
+build:mender:artifact:two:
+  stage: build
+  extends: .build:mender:artifact
+  variables:
+    MENDER_DEVICES_LIST: '["5ca6090ff3a8e90001206535"]'
+  script:
+    # create Mender artifact
+    - echo /home/root/.ssh > dest_dir
+    - echo authorized_keys > filename
+    - echo key > authorized_keys
+    - ARTIFACT_FILE_NAME=artifact_two.mender
+    - |
+      mender-artifact write module-image \
+        -T single-file \
+        --device-type raspberrypi4 \
+        -o ${MENDER_ARTIFACTS_FOLDER}/${ARTIFACT_FILE_NAME} \
+        -n updated-authorized_keys-2.0 \
+        --software-name authorized_keys \
+        --software-version 2.0 \
+        -f dest_dir \
+        -f filename \
+        -f authorized_keys
+    # save deplyment name for the artifact, to be used by deploy job
+    - echo "dev_executive_${CI_COMMIT_SHORT_SHA}" > ${MENDER_ARTIFACTS_FOLDER}/${ARTIFACT_FILE_NAME}MENDER_DEPLOYMENT_NAME
+    # save devices list for the deployment, to be used by deploy job
+    - echo ${MENDER_DEVICES_LIST} > ${MENDER_ARTIFACTS_FOLDER}/${ARTIFACT_FILE_NAME}MENDER_DEVICES_LIST
+
+#
+# Uploads built artifacts
+#
+publish:mender:artifact:
+  stage: publish
+  extends: .upload:mender:artifact
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^(main)$/'
+
+#
+# Create deployments
+#
+deploy:mender:artifact:
+  stage: deploy
+  extends:
+    - .create:mender:deployment
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^(main)$/'

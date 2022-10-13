@@ -1,0 +1,24 @@
+# GitLab CI template to build Mender artifacts.
+#
+# The template is designed to be used with the includes keyword or copied into an existing
+# configuration. It can be used to build a Mender artifact in the `script` section. 
+# `before_script` is used for creating the `MENDER_ARTIFACTS_FOLDER` folder. If it's overwritten,
+# then make sure your script contains this step.
+#
+# Mender artifacts in the `MENDER_ARTIFACTS_FOLDER` folder will be uploaded as GitLab CI artifacts
+# and shared across jobs in a pipeline.
+
+include:
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/common.gitlab-ci.yml"
+
+.build:mender:artifact:
+  image: mendersoftware/mender-ci-tools:men-5906_build_and_publish_mender-ci-tools_image_e018e952a4e9a71c318bf2a56651293efff5d8b5
+  before_script:
+    - if [ ! -d ${MENDER_ARTIFACTS_FOLDER} ]; then mkdir -p ${MENDER_ARTIFACTS_FOLDER}; fi
+  script:
+    # to be overwritten after the job is inherited
+    - mender-artifact --help
+  artifacts:
+    expire_in: 1w
+    paths:
+      - ${MENDER_ARTIFACTS_FOLDER}/*

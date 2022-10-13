@@ -1,0 +1,54 @@
+stages:
+  - build
+  - publish
+  - deploy
+
+include:
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/mender-artifact-build.gitlab-ci.yml"
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/mender-artifact-upload.gitlab-ci.yml"
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/mender-deployment-create.gitlab-ci.yml"
+
+#
+# Builds Mender artifact using 'mender-artifact' tool and upload it to MENDER_ARTIFACTS_FOLDER.
+#
+build:mender:artifact:
+  stage: build
+  extends: .build:mender:artifact
+  script:
+    - echo /home/root/.ssh > dest_dir
+    - echo authorized_keys > filename
+    - echo key > authorized_keys
+    - |
+      mender-artifact write module-image \
+        -T single-file \
+        --device-type raspberrypi4 \
+        -o ${MENDER_ARTIFACTS_FOLDER}/artifact.mender \
+        -n updated-authorized_keys-1.0 \
+        --software-name authorized_keys \
+        --software-version 1.0 \
+        -f dest_dir \
+        -f filename \
+        -f authorized_keys
+
+#
+# Uploads Mender artifacts from MENDER_ARTIFACTS_FOLDER folder to a Mender server.
+#
+publish:mender:artifact:
+  stage: publish
+  extends: .upload:mender:artifact
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^(main|production)$/'
+
+#
+# Triggers a deployment on a group of devices.
+#
+deploy:mender:artifact:
+  stage: deploy
+  extends:
+    - .create:mender:deployment
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^(main|production)$/'
+  variables:
+    MENDER_DEPLOYMENT_GROUP: group-dev
+  before_script:
+    - export MENDER_DEPLOYMENT_NAME="app_${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHORT_SHA}"

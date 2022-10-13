@@ -1,0 +1,62 @@
+# Use this template to create deployments for Mender artifacts from MENDER_ARTIFACTS_FOLDER folder.
+#
+# The template is designed to be used with the includes keyword or copied into an existing
+# configuration. It requires `MENDER_SERVER_URL` and `MENDER_SERVER_ACCESS_TOKEN` variables
+# to work and can be used to create a deployment on a Mender server.
+#
+# It's possible to set custom values by setting the following environment variables:
+# - `MENDER_DEPLOYMENT_GROUP`: The name of Mender devices group a deployment will be triggered to.
+#                              One of `MENDER_DEPLOYMENT_GROUP` or `MENDER_DEVICES_LIST` is required.
+# - `MENDER_DEVICES_LIST`: The list of Mender devices a deployment will be triggered to.
+# - `MENDER_DEPLOYMENT_NAME` (optional): The name of Mender deployment.
+#                                        (default: `${RELEASE_NAME}_${CI_COMMIT_SHORT_SHA}`)
+#
+# Deployment group/name and devices list can be set by placing its values into GitLab CI artifacts
+# folder into files with related environment variables as suffix.
+# (ex. `MENDER_ARTIFACTS_FOLDER/${ARTIFACT_NAME}MENDER_DEPLOYMENT_GROUP`)
+
+include:
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/common.gitlab-ci.yml"
+
+.create:mender:deployment:
+  image: mendersoftware/mender-ci-tools:men-5906_build_and_publish_mender-ci-tools_image_e018e952a4e9a71c318bf2a56651293efff5d8b5
+  variables:
+    MENDER_DEPLOYMENT_GROUP: "" # The name of Mender devices group a deployment will be triggered to. One of `MENDER_DEPLOYMENT_GROUP` or `MENDER_DEVICES_LIST` is required
+    MENDER_DEVICES_LIST: ""     # The list of Mender devices a deployment will be triggered to
+    MENDER_DEPLOYMENT_NAME: ""  # (optional): The name of Mender deployment (default: `${RELEASE_NAME}_${CI_COMMIT_SHORT_SHA}`)
+  script:
+    - for ARTIFACT in $(ls ${MENDER_ARTIFACTS_FOLDER}/*.mender); do
+    -   'echo "Processing artifact ${ARTIFACT}"'
+    -   RELEASE_NAME=$(mender-artifact read --no-progress ${ARTIFACT} | grep "Name:" | awk {'print $2'})
+        # get Mender deployment name from a file if exists
+    -   DEPLOYMENT_NAME_FILE=${ARTIFACT}MENDER_DEPLOYMENT_NAME
+    -   if [ -f ${DEPLOYMENT_NAME_FILE} ]; then
+    -     MENDER_DEPLOYMENT_NAME=$(cat ${DEPLOYMENT_NAME_FILE})
+    -   elif [[ -z "${MENDER_DEPLOYMENT_NAME}" || "${MENDER_DEPLOYMENT_NAME}" == "" ]]; then
+    -     MENDER_DEPLOYMENT_NAME=${RELEASE_NAME}_${CI_COMMIT_SHORT_SHA}
+    -   fi
+        # get deployment group name from a file if exists
+    -   DEPLOYMENT_GROUP_FILE=${ARTIFACT}MENDER_DEPLOYMENT_GROUP
+    -   if [ -f ${DEPLOYMENT_GROUP_FILE} ]; then
+    -     MENDER_DEPLOYMENT_GROUP=$(cat ${DEPLOYMENT_GROUP_FILE})
+    -   fi
+        # get devices list from a file if exists
+    -   DEVICES_LIST_FILE=${ARTIFACT}MENDER_DEVICES_LIST
+    -   if [ -f ${DEVICES_LIST_FILE} ]; then
+    -     MENDER_DEVICES_LIST=$(cat ${DEVICES_LIST_FILE})
+    -   elif [ ! -z "${MENDER_DEPLOYMENT_GROUP}" ]; then
+    -     'MENDER_DEVICES_LIST=$(curl -s -H "Authorization: Bearer ${MENDER_SERVER_ACCESS_TOKEN}" ${MENDER_SERVER_URL}/api/management/v1/inventory/groups/${MENDER_DEPLOYMENT_GROUP}/devices)'
+    -   fi
+        # call create deployment endpoint
+    -   'RESPONSE=$(curl -s -w " http_response_code %{http_code}" -X POST ${MENDER_SERVER_URL}/api/management/v1/deployments/deployments -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${MENDER_SERVER_ACCESS_TOKEN}" --data-raw "{\"name\": \"${MENDER_DEPLOYMENT_NAME}\", \"artifact_name\": \"${RELEASE_NAME}\", \"devices\": ${MENDER_DEVICES_LIST}}")'
+    -   if [[ "${RESPONSE}" == " http_response_code 201" ]]; then
+    -     'echo "INFO: Deployment ${MENDER_DEPLOYMENT_NAME} successfully created"'
+    -   else
+    -     'echo "ERROR: Failed to create deployment ${MENDER_DEPLOYMENT_NAME}, release: ${RELEASE_NAME}, group: ${MENDER_DEPLOYMENT_GROUP} (${MENDER_DEVICES_LIST}), server: ${MENDER_SERVER_URL}"'
+    -     'echo "Server respoonse: ${RESPONSE}"'
+    -     exit 1
+    -   fi
+    -   unset MENDER_DEPLOYMENT_NAME
+    -   unset MENDER_DEPLOYMENT_GROUP
+    -   unset MENDER_DEVICES_LIST
+    - done

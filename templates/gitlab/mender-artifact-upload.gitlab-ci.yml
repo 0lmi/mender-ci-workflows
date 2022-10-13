@@ -1,0 +1,26 @@
+# GitLab CI template to upload Mender artifacts from MENDER_ARTIFACTS_FOLDER folder
+# to a Mender server.
+#
+# The template is designed to be used with the includes keyword or copied into an existing
+# configuration. It requires `MENDER_SERVER_URL` and `MENDER_SERVER_ACCESS_TOKEN` variables
+# to work and can be used to upload a Mender artifacts from `MENDER_ARTIFACTS_FOLDER` folder
+# to a Mender server.
+
+include:
+  - remote: "https://raw.githubusercontent.com/0lmi/mender-ci-workflows/master/templates/gitlab/common.gitlab-ci.yml"
+
+.upload:mender:artifact:
+  image: mendersoftware/mender-ci-tools:men-5906_build_and_publish_mender-ci-tools_image_e018e952a4e9a71c318bf2a56651293efff5d8b5
+  script:
+    - for ARTIFACT in $(ls ${MENDER_ARTIFACTS_FOLDER}/*.mender); do
+    -   'echo "INFO: processing artifact ${ARTIFACT}"'
+        # check if an artifact exists on the server
+    -   RELEASE_NAME=$(mender-artifact read --no-progress ${ARTIFACT} | grep "Name:" | awk {'print $2'})
+    -   ARTIFACTS_LIST=$(mender-cli artifacts list --server ${MENDER_SERVER_URL} --token-value ${MENDER_SERVER_ACCESS_TOKEN})
+    -   if [ $(echo ${ARTIFACTS_LIST} | grep -c ${RELEASE_NAME}) -gt 0 ]; then
+    -     'echo "WARN: artifact ${ARTIFACT} with name ${RELEASE_NAME} already exists on the server, upload is skipped"'
+    -     continue
+    -   fi
+        # upload artifact
+    -   mender-cli artifacts upload --no-progress --server ${MENDER_SERVER_URL} --token-value ${MENDER_SERVER_ACCESS_TOKEN} ${ARTIFACT}
+    - done
