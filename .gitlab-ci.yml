@@ -15,3 +15,7 @@ include:
     file: '.gitlab-ci-check-docker-build.yml'
   - project: 'Northern.tech/Mender/mendertesting'
     file: '.gitlab-ci-github-status-updates.yml'
+
+publish:image:
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^*$/'
